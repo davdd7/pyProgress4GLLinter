@@ -13,12 +13,14 @@ class ProgressLinter:
     ]
 
     BLOCK_WORDS = [
-        r"for\s*each", r"for\s*first", r"for\s*last", r"case", r"function", r"procedure", r"forward", r"do", r"repeat"
+        r"for\s*each", r"for\s*first", r"for\s*last", r"case", r"function", r"procedure", r"forward", r"do", r"repeat", r"in"
     ]
 
     BLOCK_IF_WORDS = [
-        r"for\s*each", r"for\s*first", r"for\s*last", r"case", r"find", r"if"
+        r"for\s*each", r"for\s*first", r"for\s*last", r"case", r"find", r"case"
     ]
+
+    INDENT = "  "
 
     def __init__(self, displayer:Displayer, filer:Filer, check_comment: CheckComment, config: Config):
         self.__RESULT = []
@@ -44,6 +46,11 @@ class ProgressLinter:
         self.is_comment = False
 
         self.is_include = False
+
+        self.added_stack = False
+
+        self.string_line = ""
+        self.no_include_line = ""
 
 
     def parse_file(self,filename):
@@ -80,12 +87,14 @@ class ProgressLinter:
     def _check_line(self, line_string, line_num):
 
         if self._check_include(line_string):
+            # проверка инклюдов на всякие блоки и прочие встроенные штуки
+            self._check_end_statement_comment(self.no_include_line, line_num)
+            self.no_include_line = ""
+
+            self.check_comment.warns_dict[line_num] = line_string
             self.filer.add_new_line(line_string + "\n")
             return
-        
-        
 
-        
         self.do_checker = False
         self.need_comment = True
 
@@ -97,6 +106,9 @@ class ProgressLinter:
 
         self.comment_state = self.check_comment.check_is_comment(line_string, line_num)
         self.is_comment = self.check_comment.is_comment
+        
+        #print(f"linenum {line_num} if {self.if_state_flag}")
+        #print(f"line {line_num} stack len {len(self.stack)} elem {(self.stack[-1] if len(self.stack) > 0 else "")}")
 
         if self.is_comment and (self.comment_state != 1 and self.comment_state != 4 and self.comment_state != 3):
             self.filer.add_new_line(line_string + "\n")
@@ -108,6 +120,12 @@ class ProgressLinter:
             self._is_end_for(new_line)
 
             if self._is_string(new_line):
+                # если есть строки, то проверяем для блоков всё кроме строк
+                # должны только добавлять что-то здесь
+                self._check_end_statement_comment(self.string_line, line_num)
+                self.string_line = ""
+
+                self.check_comment.warns_dict[line_num] = line_string
                 self.filer.add_new_line(line_string + "\n")
                 return
             #self.is_comment = True
@@ -118,6 +136,12 @@ class ProgressLinter:
             self._is_end_for(new_line)
 
             if self._is_string(new_line):
+                # если есть строки, то проверяем для блоков всё кроме строк
+                # должны только добавлять что-то здесь
+                self._check_end_statement_comment(self.string_line, line_num)
+                self.string_line = ""
+
+                self.check_comment.warns_dict[line_num] = line_string
                 self.filer.add_new_line(line_string + "\n")
                 return
             #self.is_comment = False
@@ -142,6 +166,12 @@ class ProgressLinter:
 
             new_line = line_string
             if self._is_string(new_line):
+                # если есть строки, то проверяем для блоков всё кроме строк
+                # должны только добавлять что-то здесь
+                self._check_end_statement_comment(self.string_line, line_num)
+                self.string_line = ""
+
+                self.check_comment.warns_dict[line_num] = new_line
                 self.filer.add_new_line(new_line + "\n")
                 return
                  
@@ -155,6 +185,10 @@ class ProgressLinter:
             new_line = new_line + self.check_comment.comment_ms[line_num]["comment"]
 
         new_line = new_line + "\n"
+
+        #print(f"line {line_num} stack len {len(self.stack)} elem {(self.stack[-1] if len(self.stack) > 0 else "")}")
+
+        new_line = self._get_indent() + new_line.lstrip()
 
         self.filer.add_new_line(new_line)
 
@@ -173,18 +207,23 @@ class ProgressLinter:
         return new_line
     
     def _is_string(self, new_line):
+        have_string = False
         if not self.is_comment:
-
             if re.search(r"\"", new_line):
-                return True
+                have_string = True
             if re.search(r"'", new_line):
-                return True
-            return False
-        return False
+                have_string = True
+            
+            if have_string:
+                self.string_line = re.sub(r'"(?:[^"~]|~.)*"', '', new_line)
+                self.string_line = re.sub(r"'(?:[^'~]|~.)*'", '', self.string_line)
+        
+        return have_string
     
 
     def _check_include(self, new_line):
         if re.search(r"\{(.+?)\}", new_line):
+            self.no_include_line = re.sub(r"\{(.+?)\}", "", new_line)
             return True
         if re.search(r"\{", new_line) and not self.is_comment:
             self.is_include = True
@@ -200,6 +239,7 @@ class ProgressLinter:
         '''
         проверка комментариев после end
         '''
+        stack_len_before = len(self.stack)
 
         self._check_if_statement(new_line, line_num)
 
@@ -207,17 +247,23 @@ class ProgressLinter:
 
         new_line = self._check_end_of_block(new_line, line_num)
 
+        stack_len_after = len(self.stack)
+        if stack_len_after > stack_len_before:
+            self.added_stack = True
+        else:
+            self.added_stack = False
 
         return new_line
 
     def _check_end_of_block(self, new_line:str, line_num):
         if re.search(r"\bend\b", new_line, re.I):
+            # игнорируем инклюды
             if not re.search(r"{(.*?)\bend\b(.*?)}", new_line, re.IGNORECASE):
                 self.end_flag = True
 
         dot_match = re.search(r"\.", new_line)
         if dot_match and self.end_flag:
-
+            self.ifdo_checker = False
             self.end_flag = False
             end_info_from_stack = self.stack.pop()
 
@@ -284,6 +330,8 @@ class ProgressLinter:
                     self.stack.append(f" /* END FUNCTION {func_name_match.group(1)} */ ")
                 if bw == r"forward" and self.function_flag:
                     self.stack.pop()
+                if bw == r"in" and self.function_flag:
+                    self.stack.pop()
                 if bw == r"case" and not re.search(r"\bend\b", new_line, re.I):
                     self.stack.append(f" /* END CASE {line_num} */ ") 
                 if bw == r"for\s*each" and not self.for_checker:
@@ -301,37 +349,54 @@ class ProgressLinter:
                     self.stack.append(f" /* END DO {line_num}*/ ")
 
     def _check_if_statement(self, new_line: str, line_num: int):
+        current_line_num = 0
         if re.search(r"\bIF\b(.*?)\bTHEN\b(.*?)\bELSE\b", new_line, re.IGNORECASE):
             return
+        
+        #print(f"if {self.if_state_flag} then {self.then_flag}")
+        # если встречается второй if, то он сперва его добавляет, а потом делает поп
 
         if re.search(r"\bif\b", new_line, re.IGNORECASE):
+            #print("founded if")
+            if self.if_state_flag and self.then_flag:
+                self.stack.pop()
+                self.if_state_flag = False
+                self.then_flag = False
+
             if not re.search(r"\bIF\b(.*?)\bTHEN\b(.*?)\bELSE\b", new_line, re.IGNORECASE):
-                self.stack.append(f" /* END IF {line_num} */ ")
-                self.if_state_flag = True
+                    self.stack.append(f" /* END IF {line_num} */ ")
+                    self.if_state_flag = True
 
         if self.if_state_flag:
             if re.search(r"\bthen\b", new_line, re.IGNORECASE):
                 self.then_flag = True
 
         if self.if_state_flag and self.then_flag:
-            for el in self.BLOCK_IF_WORDS:
-                if re.search(r"\b{}\b".format(el), new_line, re.IGNORECASE):
-                    self.stack.pop()
-                    self.if_state_flag = False
-                    self.then_flag = False
-                    return
-            if re.search(r"\bdo\s*:", new_line, re.IGNORECASE):
+            #print(f"flags if and then")
 
+            if re.search(r"\bdo\s*:", new_line, re.IGNORECASE):
                 self.if_state_flag = False
                 self.then_flag = False
                 self.do_checker = True
-
-                
             elif new_line.endswith("."):
 
                 self.stack.pop()
                 self.if_state_flag = False
                 self.then_flag = False
+
+            if not self.do_checker:
+                for el in self.BLOCK_IF_WORDS:
+                    if re.search(r"\b{}\b".format(el), new_line, re.IGNORECASE):
+                        #print(f"linenum {line_num} founded el {el} stack before {self.stack[-1]}")
+                        self.stack.pop()
+                        self.if_state_flag = False
+                        self.then_flag = False
+                        return
+
+    def _get_indent(self):
+        stack_len = len(self.stack)
+        muliplicity = (stack_len - 1 if self.added_stack else stack_len)
+        return self.INDENT * muliplicity
 
     def _write_result(self, line_num, line_string, new_line):
             '''

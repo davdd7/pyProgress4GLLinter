@@ -64,6 +64,10 @@ class CheckComment:
                 return 4
             else:
                 return 5
+            
+        if not self.is_comment:
+            double_com = re.search(r"\/\/", line)
+            # дописать логику для //
 
 
         st_com = re.search(r"/\*", line)
