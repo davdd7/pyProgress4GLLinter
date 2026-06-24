@@ -1,3 +1,5 @@
 .venv
 my_file.p
 .files
+*.files
+*__pycache__
