@@ -141,7 +141,6 @@ class ProgressLinter:
                 self._check_end_statement_comment(self.string_line, line_num)
                 self.string_line = ""
 
-                self.check_comment.warns_dict[line_num] = line_string
                 self.filer.add_new_line(line_string + "\n")
                 return
             #self.is_comment = True
@@ -157,7 +156,6 @@ class ProgressLinter:
                 self._check_end_statement_comment(self.string_line, line_num)
                 self.string_line = ""
 
-                self.check_comment.warns_dict[line_num] = line_string
                 self.filer.add_new_line(line_string + "\n")
                 return
             #self.is_comment = False
@@ -187,7 +185,6 @@ class ProgressLinter:
                 self._check_end_statement_comment(self.string_line, line_num)
                 self.string_line = ""
 
-                self.check_comment.warns_dict[line_num] = new_line
                 self.filer.add_new_line(new_line + "\n")
                 return
                  
@@ -318,6 +315,7 @@ class ProgressLinter:
                             self.need_comment = False
                             return new_line + end_info_from_stack
                 else:
+                    self.need_comment = False
                     return new_line + end_info_from_stack
 
         return new_line
