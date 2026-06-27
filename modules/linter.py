@@ -17,7 +17,7 @@ class ProgressLinter:
     ]
 
     BLOCK_IF_WORDS = [
-        r"for\s*each", r"for\s*first", r"for\s*last", r"case", r"find", r"case"
+        r"for\s*each", r"for\s*first", r"for\s*last", r"case", r"find", r"case", r"else"
     ]
 
     INDENT = "  "
@@ -55,27 +55,43 @@ class ProgressLinter:
 
     def parse_file(self,filename):
         line_num = 0
-        check_full = True
+        check_part = False
+        check_block = False
         count = 0
+        count_start = 0
+        count_end = 0
 
-        if self.config.lines != "":
-            check_full = False
+        if self.config.lines != None:
+            
             try:
-                count = int(self.config.lines)
+                if "-" in self.config.lines:
+                    lines_list = self.config.lines.split("-")
+                    count_start = int(lines_list[0])
+                    count_end = int(lines_list[1])
+                    check_block = True
+                else:
+                    count = int(self.config.lines)
+                    check_part = True
             except Exception as e:
-                print(f"Значение {self.config.lines} должно быть числом!")
-                check_full = True
+                print(f"Значение {self.config.lines} должно быть числом или разделяться '-'!")
 
         for line in self.filer.read_file_line(filename):
+            need_check = True
             line_num += 1
-            if not check_full and line_num > count:
-                self.filer.add_new_line(line)
-            else:
+            if check_block and (line_num < count_start or line_num > count_end):
+                need_check = False
+            if check_part and line_num > count:
+                need_check = False
+            
+            if need_check:
                 try:
                     self._check_line(line.rstrip(), line_num)
                 except Exception as e:
                     print(f"ERROR LINE {line_num} line: {line} er_mes: {e}")
                     self.filer.add_new_line(line)
+            else:
+                self.filer.add_new_line(line)
+                
             
 
         self.displayer.display_warns(self.check_comment.warns_dict)
