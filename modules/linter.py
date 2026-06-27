@@ -341,8 +341,12 @@ class ProgressLinter:
                     self.function_flag = True
                     func_name_match = re.search(r"\bFUNCTION\b\s+(.+?)\s+\bRETURNS\b", new_line, re.IGNORECASE)
                     if not func_name_match:
-                        self.function_flag = False
-                        return
+                        func_name_match = re.search(r"\bFUNCTION\b\s+(.+?)\s+\bRETURN\b", new_line, re.IGNORECASE)
+                        if not func_name_match:
+                            self.function_flag = False
+                            return
+                        else:
+                            self.check_comment.warns_dict[line_num] = "PLEASE CORRECT 'RETURNS': " + new_line
                     self.stack.append(f" /* END FUNCTION {func_name_match.group(1)} */ ")
                 if bw == r"forward" and self.function_flag:
                     self.stack.pop()
