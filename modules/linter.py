@@ -187,8 +187,8 @@ class ProgressLinter:
         new_line = new_line + "\n"
 
         #print(f"line {line_num} stack len {len(self.stack)} elem {(self.stack[-1] if len(self.stack) > 0 else "")}")
-
-        new_line = self._get_indent() + new_line.lstrip()
+        if not self.config.no_indent:
+            new_line = self._get_indent() + new_line.lstrip()
 
         self.filer.add_new_line(new_line)
 

@@ -9,6 +9,7 @@ class Config:
         self.enc = ""
         self.fix = False
         self.no_display = False
+        self.no_indent = False
         self.lines = ""
         
         self._get_parser_args()
@@ -19,6 +20,7 @@ class Config:
         parser.add_argument("--enc", help="Set encoding cp866 or windows-1251")
         parser.add_argument("--fix", action="store_true")
         parser.add_argument("--no_display", action="store_true")
+        parser.add_argument("--no_indent", action="store_true")
         parser.add_argument("--lines", help="Set count for check, or all")
         args = parser.parse_args()
         
@@ -26,4 +28,5 @@ class Config:
         self.enc = args.enc
         self.fix = args.fix
         self.no_display = args.no_display
+        self.no_indent = args.no_indent
         self.lines = args.lines
